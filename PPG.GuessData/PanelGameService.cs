@@ -5,28 +5,34 @@ namespace PPG.GuessData;
 public sealed class PanelGameService : IPanelGameService
 {
     private readonly IExcelReaderService _excelReaderService;
+    private readonly IPanelFileStorage _fileStorage;
 
-    public PanelGameService(IExcelReaderService excelReaderService)
+    public PanelGameService(
+        IExcelReaderService excelReaderService,
+        IPanelFileStorage fileStorage)
     {
         _excelReaderService = excelReaderService;
+        _fileStorage = fileStorage;
     }
 
-    private static readonly HashSet<string> SupportedExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".xlsx", ".xlsm" };
-
     public async Task<IReadOnlyList<PanelGame>> GetAvailableGamesAsync(
-        string filesDirectory,
         CancellationToken cancellationToken = default)
     {
         var games = new List<PanelGame>();
-        foreach (var path in GetGameFilePaths(filesDirectory))
+        var fileNames = await _fileStorage.ListExcelFileNamesAsync(cancellationToken);
+        foreach (var fileName in fileNames)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             string? sourceUrl;
             try
             {
-                sourceUrl = await _excelReaderService.ReadSourceUrlAsync(path, cancellationToken);
+                await using var workbookStream = await _fileStorage.OpenExcelFileAsync(
+                    fileName,
+                    cancellationToken);
+                sourceUrl = await _excelReaderService.ReadSourceUrlAsync(
+                    workbookStream,
+                    cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -38,7 +44,6 @@ public sealed class PanelGameService : IPanelGameService
                 sourceUrl = null;
             }
 
-            var fileName = Path.GetFileName(path);
             games.Add(new PanelGame
             {
                 FileName = fileName,
@@ -53,44 +58,38 @@ public sealed class PanelGameService : IPanelGameService
             .ToArray();
     }
 
-    public string ResolveGameFilePath(string filesDirectory, string? fileName)
+    public async Task<string> ResolveGameFileNameAsync(
+        string? fileName,
+        CancellationToken cancellationToken = default)
     {
-        var gamePaths = GetGameFilePaths(filesDirectory);
-        if (gamePaths.Count == 0)
+        var gameFileNames = await _fileStorage.ListExcelFileNamesAsync(cancellationToken);
+        if (gameFileNames.Count == 0)
         {
-            throw new FileNotFoundException("No supported Excel game files were found.", filesDirectory);
+            throw new FileNotFoundException(
+                "No supported Excel game files were found in Azure Blob Storage.");
         }
 
-        var gamePath = string.IsNullOrWhiteSpace(fileName)
-            ? gamePaths
-                .OrderBy(path => BuildDisplayName(Path.GetFileName(path)), StringComparer.OrdinalIgnoreCase)
-                .ThenBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+        var requestedFileName = fileName?.Trim();
+        var gameFileName = string.IsNullOrWhiteSpace(requestedFileName)
+            ? gameFileNames
+                .OrderBy(BuildDisplayName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(candidate => candidate, StringComparer.OrdinalIgnoreCase)
                 .First()
-            : gamePaths.FirstOrDefault(path =>
-                string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase));
+            : gameFileNames.FirstOrDefault(candidate => string.Equals(
+                  candidate,
+                  requestedFileName,
+                  StringComparison.Ordinal))
+              ?? gameFileNames.FirstOrDefault(candidate => string.Equals(
+                  candidate,
+                  requestedFileName,
+                  StringComparison.OrdinalIgnoreCase));
 
-        if (gamePath is null)
+        if (gameFileName is null)
         {
             throw new ArgumentException("Select a valid game file.", nameof(fileName));
         }
 
-        return gamePath;
-    }
-
-    private static IReadOnlyList<string> GetGameFilePaths(string filesDirectory)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filesDirectory);
-
-        if (!Directory.Exists(filesDirectory))
-        {
-            return [];
-        }
-
-        return Directory
-            .EnumerateFiles(filesDirectory, "*", SearchOption.TopDirectoryOnly)
-            .Where(path => SupportedExtensions.Contains(Path.GetExtension(path)))
-            .Where(path => !Path.GetFileName(path).StartsWith("~$", StringComparison.Ordinal))
-            .ToArray();
+        return gameFileName;
     }
 
     private static string BuildDisplayName(string fileName) => string.Join(

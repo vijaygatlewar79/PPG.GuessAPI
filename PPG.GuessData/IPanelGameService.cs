@@ -5,8 +5,9 @@ namespace PPG.GuessData;
 public interface IPanelGameService
 {
     Task<IReadOnlyList<PanelGame>> GetAvailableGamesAsync(
-        string filesDirectory,
         CancellationToken cancellationToken = default);
 
-    string ResolveGameFilePath(string filesDirectory, string? fileName);
+    Task<string> ResolveGameFileNameAsync(
+        string? fileName,
+        CancellationToken cancellationToken = default);
 }

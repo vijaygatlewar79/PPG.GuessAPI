@@ -11,24 +11,28 @@ public sealed class ChartSourceCatalog
         WriteIndented = true
     };
 
-    private readonly string _catalogPath;
-    private readonly SemaphoreSlim _fileLock = new(1, 1);
+    private readonly IPanelFileStorage _fileStorage;
+    private readonly string _seedCatalogPath;
+    private readonly SemaphoreSlim _catalogLock = new(1, 1);
 
-    public ChartSourceCatalog(IWebHostEnvironment environment)
+    public ChartSourceCatalog(
+        IPanelFileStorage fileStorage,
+        IWebHostEnvironment environment)
     {
-        _catalogPath = Path.Combine(environment.ContentRootPath, "chart-sources.json");
+        _fileStorage = fileStorage;
+        _seedCatalogPath = Path.Combine(environment.ContentRootPath, "chart-sources.json");
     }
 
     public async Task<ChartExcelOptions> GetOptionsAsync(CancellationToken cancellationToken = default)
     {
-        await _fileLock.WaitAsync(cancellationToken);
+        await _catalogLock.WaitAsync(cancellationToken);
         try
         {
             return new ChartExcelOptions { Sources = await ReadSourcesAsync(cancellationToken) };
         }
         finally
         {
-            _fileLock.Release();
+            _catalogLock.Release();
         }
     }
 
@@ -41,7 +45,7 @@ public sealed class ChartSourceCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
 
-        await _fileLock.WaitAsync(cancellationToken);
+        await _catalogLock.WaitAsync(cancellationToken);
         try
         {
             var sources = (await ReadSourcesAsync(cancellationToken)).ToList();
@@ -74,19 +78,17 @@ public sealed class ChartSourceCatalog
         }
         finally
         {
-            _fileLock.Release();
+            _catalogLock.Release();
         }
     }
 
-    public async Task<string?> GetFilePathAsync(
+    public async Task<string?> GetFileNameAsync(
         string fileName,
-        string filesDirectory,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(filesDirectory);
 
-        await _fileLock.WaitAsync(cancellationToken);
+        await _catalogLock.WaitAsync(cancellationToken);
         try
         {
             var requestedFileName = fileName.Trim();
@@ -95,26 +97,24 @@ public sealed class ChartSourceCatalog
 
             return source is null
                 ? null
-                : ResolveConfiguredFilePath(source.FileName, filesDirectory);
+                : await ResolveStoredFileNameAsync(
+                    ValidateConfiguredFileName(source.FileName),
+                    cancellationToken);
         }
         finally
         {
-            _fileLock.Release();
+            _catalogLock.Release();
         }
     }
 
     public async Task<bool> DeleteAsync(
         string fileName,
-        string filesDirectory,
-        string backupDirectory,
         ExcelFileBackupAction backupAction = ExcelFileBackupAction.Remove,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(filesDirectory);
-        ArgumentException.ThrowIfNullOrWhiteSpace(backupDirectory);
 
-        await _fileLock.WaitAsync(cancellationToken);
+        await _catalogLock.WaitAsync(cancellationToken);
         try
         {
             var sources = (await ReadSourcesAsync(cancellationToken)).ToList();
@@ -129,33 +129,30 @@ public sealed class ChartSourceCatalog
             }
 
             var source = sources[existingIndex];
-            var directoryPath = Path.GetFullPath(filesDirectory);
-            var filePath = ResolveConfiguredFilePath(source.FileName, filesDirectory);
-
-            string? stagedPath = null;
-            if (File.Exists(filePath))
-            {
-                ExcelFileBackup.Create(filePath, backupDirectory, backupAction);
-                stagedPath = Path.Combine(directoryPath, $".delete-{Guid.NewGuid():N}.tmp");
-                File.Move(filePath, stagedPath);
-            }
+            var configuredFileName = await ResolveStoredFileNameAsync(
+                ValidateConfiguredFileName(source.FileName),
+                cancellationToken);
 
             sources.RemoveAt(existingIndex);
             try
             {
                 await WriteSourcesAsync(sources, cancellationToken);
-                if (stagedPath is not null)
-                {
-                    File.Delete(stagedPath);
-                }
+                await _fileStorage.DeleteExcelFileAsync(
+                    configuredFileName,
+                    backupAction,
+                    cancellationToken);
             }
             catch
             {
-                if (stagedPath is not null && File.Exists(stagedPath) && !File.Exists(filePath))
+                try
                 {
-                    File.Move(stagedPath, filePath);
+                    await WriteSourcesAsync([.. sources, source], CancellationToken.None);
                 }
-                await WriteSourcesAsync([.. sources, source], CancellationToken.None);
+                catch
+                {
+                    // Preserve the original storage exception. The workbook backup,
+                    // when created, remains available for manual recovery.
+                }
                 throw;
             }
 
@@ -163,13 +160,14 @@ public sealed class ChartSourceCatalog
         }
         finally
         {
-            _fileLock.Release();
+            _catalogLock.Release();
         }
     }
 
-    private static string ResolveConfiguredFilePath(string fileName, string filesDirectory)
+    private static string ValidateConfiguredFileName(string fileName)
     {
-        if (!string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        if (fileName.IndexOfAny(['/', '\\']) >= 0
+            || !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
         {
             throw new ArgumentException("The configured file name is invalid.", nameof(fileName));
         }
@@ -181,29 +179,25 @@ public sealed class ChartSourceCatalog
             throw new ArgumentException("Only configured .xlsx or .xlsm files are supported.", nameof(fileName));
         }
 
-        var directoryPath = Path.GetFullPath(filesDirectory);
-        var directoryPrefix = directoryPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var filePath = Path.GetFullPath(Path.Combine(directoryPath, fileName));
-        if (!filePath.StartsWith(directoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException("The configured file must be inside the API Files folder.", nameof(fileName));
-        }
-
-        return filePath;
+        return fileName;
     }
 
     private async Task<IReadOnlyList<ChartSourceOption>> ReadSourcesAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_catalogPath))
+        var json = await _fileStorage.ReadCatalogAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(json) && File.Exists(_seedCatalogPath))
+        {
+            json = await File.ReadAllTextAsync(_seedCatalogPath, cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
         {
             return [];
         }
 
-        await using var stream = File.OpenRead(_catalogPath);
-        var sources = await JsonSerializer.DeserializeAsync<List<ChartSourceOption>>(
-            stream,
-            SerializerOptions,
-            cancellationToken) ?? [];
+        var sources = JsonSerializer.Deserialize<List<ChartSourceOption>>(
+            json,
+            SerializerOptions) ?? [];
 
         return sources
             .Where(source =>
@@ -218,23 +212,24 @@ public sealed class ChartSourceCatalog
         IReadOnlyList<ChartSourceOption> sources,
         CancellationToken cancellationToken)
     {
-        var temporaryPath = $"{_catalogPath}.{Guid.NewGuid():N}.tmp";
-        try
-        {
-            await using (var stream = File.Create(temporaryPath))
-            {
-                await JsonSerializer.SerializeAsync(stream, sources, SerializerOptions, cancellationToken);
-            }
+        var json = JsonSerializer.Serialize(sources, SerializerOptions);
+        await _fileStorage.WriteCatalogAsync(json, cancellationToken);
+    }
 
-            File.Move(temporaryPath, _catalogPath, true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
+    private async Task<string> ResolveStoredFileNameAsync(
+        string configuredFileName,
+        CancellationToken cancellationToken)
+    {
+        var fileNames = await _fileStorage.ListExcelFileNamesAsync(cancellationToken);
+        return fileNames.FirstOrDefault(fileName => string.Equals(
+                   fileName,
+                   configuredFileName,
+                   StringComparison.Ordinal))
+               ?? fileNames.FirstOrDefault(fileName => string.Equals(
+                   fileName,
+                   configuredFileName,
+                   StringComparison.OrdinalIgnoreCase))
+               ?? configuredFileName;
     }
 
 }

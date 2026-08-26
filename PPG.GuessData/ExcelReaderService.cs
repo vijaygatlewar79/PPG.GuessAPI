@@ -7,20 +7,15 @@ namespace PPG.GuessData;
 public sealed class ExcelReaderService : IExcelReaderService
 {
     public Task<string?> ReadSourceUrlAsync(
-        string filePath,
+        Stream workbookStream,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-
-        if (!File.Exists(filePath))
-        {
-            throw new FileNotFoundException("The panel Excel file was not found.", filePath);
-        }
+        ValidateWorkbookStream(workbookStream);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var fileStream = OpenWorkbookStream(filePath);
-        using var document = SpreadsheetDocument.Open(fileStream, false);
+        workbookStream.Position = 0;
+        using var document = SpreadsheetDocument.Open(workbookStream, false);
         var workbookPart = document.WorkbookPart
             ?? throw new InvalidDataException("The Excel workbook is missing its workbook part.");
         var sharedStrings = GetSharedStrings(workbookPart);
@@ -63,20 +58,15 @@ public sealed class ExcelReaderService : IExcelReaderService
     }
 
     public Task<PanelWorkbook> ReadPanelsAsync(
-        string filePath,
+        Stream workbookStream,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-
-        if (!File.Exists(filePath))
-        {
-            throw new FileNotFoundException("The panel Excel file was not found.", filePath);
-        }
+        ValidateWorkbookStream(workbookStream);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var fileStream = OpenWorkbookStream(filePath);
-        using var document = SpreadsheetDocument.Open(fileStream, false);
+        workbookStream.Position = 0;
+        using var document = SpreadsheetDocument.Open(workbookStream, false);
         var workbookPart = document.WorkbookPart
             ?? throw new InvalidDataException("The Excel workbook is missing its workbook part.");
 
@@ -162,11 +152,16 @@ public sealed class ExcelReaderService : IExcelReaderService
         }
     }
 
-    private static FileStream OpenWorkbookStream(string filePath) => new(
-        filePath,
-        FileMode.Open,
-        FileAccess.Read,
-        FileShare.ReadWrite | FileShare.Delete);
+    private static void ValidateWorkbookStream(Stream workbookStream)
+    {
+        ArgumentNullException.ThrowIfNull(workbookStream);
+        if (!workbookStream.CanRead || !workbookStream.CanSeek)
+        {
+            throw new ArgumentException(
+                "The Excel workbook stream must be readable and seekable.",
+                nameof(workbookStream));
+        }
+    }
 
     private static IReadOnlyList<string> GetSharedStrings(WorkbookPart workbookPart) =>
         workbookPart.SharedStringTablePart?.SharedStringTable

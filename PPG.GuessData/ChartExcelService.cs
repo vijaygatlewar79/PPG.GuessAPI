@@ -10,53 +10,42 @@ namespace PPG.GuessData;
 public sealed class ChartExcelService : IChartExcelService
 {
     private readonly HttpClient _httpClient;
+    private readonly IPanelFileStorage _fileStorage;
 
-    public ChartExcelService(HttpClient httpClient)
+    public ChartExcelService(
+        HttpClient httpClient,
+        IPanelFileStorage fileStorage)
     {
         _httpClient = httpClient;
+        _fileStorage = fileStorage;
     }
 
     public async Task<ChartExcelResult> GenerateExcelAsync(
         ChartExcelRequest request,
-        string filesDirectory,
-        string backupDirectory,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(filesDirectory);
-        ArgumentException.ThrowIfNullOrWhiteSpace(backupDirectory);
 
         ValidateUrl(request.Url);
         var fileName = BuildFileName(request.FileName);
-        var destinationPath = ResolveDestinationPath(filesDirectory, fileName);
+        var existingFileNames = await _fileStorage.ListExcelFileNamesAsync(cancellationToken);
+        fileName = existingFileNames.FirstOrDefault(candidate => string.Equals(
+                       candidate,
+                       fileName,
+                       StringComparison.Ordinal))
+                   ?? existingFileNames.FirstOrDefault(candidate => string.Equals(
+                       candidate,
+                       fileName,
+                       StringComparison.OrdinalIgnoreCase))
+                   ?? fileName;
         var html = await GetHtmlAsync(request.Url, cancellationToken);
         var (file, rowCount) = GenerateWorkbook(html, request.Url);
 
-        Directory.CreateDirectory(filesDirectory);
-        var temporaryPath = Path.Combine(
-            filesDirectory,
-            $".{Path.GetFileNameWithoutExtension(fileName)}-{Guid.NewGuid():N}.tmp");
-
-        try
-        {
-            await File.WriteAllBytesAsync(temporaryPath, file, cancellationToken);
-            if (File.Exists(destinationPath))
-            {
-                ExcelFileBackup.Create(
-                    destinationPath,
-                    backupDirectory,
-                    ExcelFileBackupAction.Update);
-            }
-
-            File.Move(temporaryPath, destinationPath, true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
+        await _fileStorage.SaveExcelFileAsync(
+            fileName,
+            file,
+            ExcelFileBackupAction.Update,
+            cancellationToken);
 
         return new ChartExcelResult
         {
@@ -377,22 +366,9 @@ public sealed class ChartExcelService : IChartExcelService
             fileName = fileName.Replace(invalidCharacter, '_');
         }
 
+        fileName = fileName.Replace('/', '_').Replace('\\', '_');
+
         return fileName;
-    }
-
-    private static string ResolveDestinationPath(string filesDirectory, string fileName)
-    {
-        var directoryPath = Path.GetFullPath(filesDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-        var destinationPath = Path.GetFullPath(Path.Combine(directoryPath, fileName));
-
-        if (!destinationPath.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException("File name must resolve inside the panel Files folder.", nameof(fileName));
-        }
-
-        return destinationPath;
     }
 
     private static void ValidateUrl(string url)

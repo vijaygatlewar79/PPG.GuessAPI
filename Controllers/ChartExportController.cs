@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using PPG.GuessData;
 using PPG.GuessData.Models;
@@ -12,16 +10,16 @@ public sealed class ChartExportController : ControllerBase
 {
     private readonly IChartExcelService _chartExcelService;
     private readonly ChartSourceCatalog _chartSourceCatalog;
-    private readonly IWebHostEnvironment _environment;
+    private readonly IPanelFileStorage _fileStorage;
 
     public ChartExportController(
         IChartExcelService chartExcelService,
         ChartSourceCatalog chartSourceCatalog,
-        IWebHostEnvironment environment)
+        IPanelFileStorage fileStorage)
     {
         _chartExcelService = chartExcelService;
         _chartSourceCatalog = chartSourceCatalog;
-        _environment = environment;
+        _fileStorage = fileStorage;
     }
 
     [HttpGet("options")]
@@ -32,7 +30,7 @@ public sealed class ChartExportController : ControllerBase
     }
 
     [HttpPost("open")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
@@ -42,40 +40,41 @@ public sealed class ChartExportController : ControllerBase
     {
         try
         {
-            var filePath = await _chartSourceCatalog.GetFilePathAsync(
+            var fileName = await _chartSourceCatalog.GetFileNameAsync(
                 request.FileName,
-                Path.Combine(_environment.ContentRootPath, "Files"),
                 cancellationToken);
 
-            if (filePath is null || !System.IO.File.Exists(filePath))
+            if (fileName is null
+                || !await _fileStorage.ExcelFileExistsAsync(fileName, cancellationToken))
             {
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: "The configured Excel file was not found.");
             }
 
-            using var process = Process.Start(new ProcessStartInfo(filePath)
-            {
-                UseShellExecute = true
-            });
-
-            if (process is null)
-            {
-                throw new InvalidOperationException("The operating system did not open the Excel file.");
-            }
-
-            return NoContent();
+            var stream = await _fileStorage.OpenExcelFileAsync(fileName, cancellationToken);
+            return File(
+                stream,
+                GetExcelContentType(fileName),
+                fileName,
+                enableRangeProcessing: true);
         }
         catch (ArgumentException exception)
         {
             ModelState.AddModelError(nameof(request), exception.Message);
             return ValidationProblem(ModelState);
         }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        catch (FileNotFoundException)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "The configured Excel file was not found.");
+        }
+        catch (IOException exception)
         {
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
-                title: "The Excel file could not be opened.",
+                title: "The Excel file could not be downloaded.",
                 detail: exception.Message);
         }
     }
@@ -93,8 +92,6 @@ public sealed class ChartExportController : ControllerBase
         {
             var removed = await _chartSourceCatalog.DeleteAsync(
                 fileName,
-                Path.Combine(_environment.ContentRootPath, "Files"),
-                Path.Combine(_environment.ContentRootPath, "FilesBackup"),
                 backupAction ?? ExcelFileBackupAction.Remove,
                 cancellationToken);
 
@@ -139,8 +136,6 @@ public sealed class ChartExportController : ControllerBase
 
             var result = await _chartExcelService.GenerateExcelAsync(
                 request,
-                Path.Combine(_environment.ContentRootPath, "Files"),
-                Path.Combine(_environment.ContentRootPath, "FilesBackup"),
                 cancellationToken);
 
             await _chartSourceCatalog.SaveAsync(
@@ -178,4 +173,9 @@ public sealed class ChartExportController : ControllerBase
                 detail: exception.Message);
         }
     }
+
+    private static string GetExcelContentType(string fileName) =>
+        Path.GetExtension(fileName).Equals(".xlsm", StringComparison.OrdinalIgnoreCase)
+            ? "application/vnd.ms-excel.sheet.macroEnabled.12"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }

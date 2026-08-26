@@ -5,10 +5,10 @@ namespace PPG.GuessData;
 public interface IExcelReaderService
 {
     Task<string?> ReadSourceUrlAsync(
-        string filePath,
+        Stream workbookStream,
         CancellationToken cancellationToken = default);
 
     Task<PanelWorkbook> ReadPanelsAsync(
-        string filePath,
+        Stream workbookStream,
         CancellationToken cancellationToken = default);
 }

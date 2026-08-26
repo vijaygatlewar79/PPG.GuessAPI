@@ -11,21 +11,21 @@ public sealed class PanelController : ControllerBase
     private readonly IExcelReaderService _excelReaderService;
     private readonly IPanelAnalysisService _panelAnalysisService;
     private readonly IPanelGameService _panelGameService;
+    private readonly IPanelFileStorage _fileStorage;
     private readonly ChartSourceCatalog _chartSourceCatalog;
-    private readonly IWebHostEnvironment _environment;
 
     public PanelController(
         IExcelReaderService excelReaderService,
         IPanelAnalysisService panelAnalysisService,
         IPanelGameService panelGameService,
-        ChartSourceCatalog chartSourceCatalog,
-        IWebHostEnvironment environment)
+        IPanelFileStorage fileStorage,
+        ChartSourceCatalog chartSourceCatalog)
     {
         _excelReaderService = excelReaderService;
         _panelAnalysisService = panelAnalysisService;
         _panelGameService = panelGameService;
+        _fileStorage = fileStorage;
         _chartSourceCatalog = chartSourceCatalog;
-        _environment = environment;
     }
 
     [HttpGet("games")]
@@ -33,9 +33,7 @@ public sealed class PanelController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<PanelGame>>> GetGames(
         CancellationToken cancellationToken)
     {
-        var games = await _panelGameService.GetAvailableGamesAsync(
-            GetFilesDirectory(),
-            cancellationToken);
+        var games = await _panelGameService.GetAvailableGamesAsync(cancellationToken);
         var options = await _chartSourceCatalog.GetOptionsAsync(cancellationToken);
         var sourcesByFileName = options.Sources.ToDictionary(
             source => source.FileName,
@@ -56,23 +54,36 @@ public sealed class PanelController : ControllerBase
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<Panel>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<Panel>>> Get(
         [FromQuery] string? fileName,
         CancellationToken cancellationToken)
     {
-        string filePath;
         try
         {
-            filePath = _panelGameService.ResolveGameFilePath(GetFilesDirectory(), fileName);
+            var resolvedFileName = await _panelGameService.ResolveGameFileNameAsync(
+                fileName,
+                cancellationToken);
+            await using var workbookStream = await _fileStorage.OpenExcelFileAsync(
+                resolvedFileName,
+                cancellationToken);
+            var workbook = await _excelReaderService.ReadPanelsAsync(
+                workbookStream,
+                cancellationToken);
+            return Ok(workbook.Panels);
         }
         catch (ArgumentException exception)
         {
             ModelState.AddModelError(nameof(fileName), exception.Message);
             return ValidationProblem(ModelState);
         }
-
-        var workbook = await _excelReaderService.ReadPanelsAsync(filePath, cancellationToken);
-        return Ok(workbook.Panels);
+        catch (FileNotFoundException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "The selected game file was not found.",
+                detail: exception.Message);
+        }
     }
 
     [HttpPost("analyze")]
@@ -85,8 +96,15 @@ public sealed class PanelController : ControllerBase
         PanelAnalysisResult result;
         try
         {
-            var filePath = _panelGameService.ResolveGameFilePath(GetFilesDirectory(), request.FileName);
-            var workbook = await _excelReaderService.ReadPanelsAsync(filePath, cancellationToken);
+            var fileName = await _panelGameService.ResolveGameFileNameAsync(
+                request.FileName,
+                cancellationToken);
+            await using var workbookStream = await _fileStorage.OpenExcelFileAsync(
+                fileName,
+                cancellationToken);
+            var workbook = await _excelReaderService.ReadPanelsAsync(
+                workbookStream,
+                cancellationToken);
             result = _panelAnalysisService.Analyze(
                 workbook.Panels,
                 workbook.AvailableDays,
@@ -102,6 +120,7 @@ public sealed class PanelController : ControllerBase
                 "pattern" => nameof(request.Pattern),
                 "numberType" => nameof(request.NumberType),
                 "skipLastNumbers" => nameof(request.SkipLastNumbers),
+                "fileName" => nameof(request.FileName),
                 _ => nameof(request.Numbers)
             };
             ModelState.AddModelError(fieldName, exception.Message);
@@ -120,6 +139,4 @@ public sealed class PanelController : ControllerBase
 
         return Ok(result);
     }
-
-    private string GetFilesDirectory() => Path.Combine(_environment.ContentRootPath, "Files");
 }

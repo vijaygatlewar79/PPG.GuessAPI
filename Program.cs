@@ -3,8 +3,12 @@ using PPG.GuessData;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+    options.Filters.Add<AzureStorageExceptionFilter>());
 builder.Services.AddMemoryCache();
+builder.Services.Configure<AzureBlobStorageOptions>(
+    builder.Configuration.GetSection(AzureBlobStorageOptions.SectionName));
+builder.Services.AddSingleton<IPanelFileStorage, AzureBlobPanelFileStorage>();
 builder.Services.AddScoped<IExcelReaderService, ExcelReaderService>();
 builder.Services.AddScoped<IPanelAnalysisService, PanelAnalysisService>();
 builder.Services.AddScoped<IPanelGameService, PanelGameService>();
