@@ -1,0 +1,7 @@
+# Visual Studio user and workspace files
+.vs/
+*.user
+
+# .NET build output
+[Bb]in/
+[Oo]bj/
