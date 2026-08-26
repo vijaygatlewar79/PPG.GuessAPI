@@ -1,0 +1,37 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{5564944A-FF95-4A41-8133-DC4396AB3C66}|PPG.GuessAPI.csproj|e:\\guess\\ppg.guess\\ppg.guessapi\\controllers\\patternpredictioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5564944A-FF95-4A41-8133-DC4396AB3C66}|PPG.GuessAPI.csproj|solutionrelative:controllers\\patternpredictioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "PatternPredictionController.cs",
+              "DocumentMoniker": "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\Controllers\\PatternPredictionController.cs",
+              "RelativeDocumentMoniker": "Controllers\\PatternPredictionController.cs",
+              "ToolTip": "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\Controllers\\PatternPredictionController.cs",
+              "RelativeToolTip": "Controllers\\PatternPredictionController.cs",
+              "ViewState": "AgIAACsAAAAAAAAAAAAgwC0AAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-08-25T17:01:36.092Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

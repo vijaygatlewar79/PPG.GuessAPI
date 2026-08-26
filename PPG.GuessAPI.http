@@ -1,0 +1,16 @@
+@PPG.GuessAPI_HostAddress = http://localhost:5288
+
+GET {{PPG.GuessAPI_HostAddress}}/api/panel/games
+Accept: application/json
+
+###
+
+POST {{PPG.GuessAPI_HostAddress}}/api/chart-export/generate
+Content-Type: application/json
+
+{
+  "url": "https://sattamatkadpboss.mobi/record/kalyan-morning-penal-chart.php",
+  "fileName": "KALYAN MORNING PENAL"
+}
+
+###
