@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PPG.GuessData")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9b0e98fa728b0e01f3543d43b8cf690a7bbc3834")]
 [assembly: System.Reflection.AssemblyProductAttribute("PPG.GuessData")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PPG.GuessData")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

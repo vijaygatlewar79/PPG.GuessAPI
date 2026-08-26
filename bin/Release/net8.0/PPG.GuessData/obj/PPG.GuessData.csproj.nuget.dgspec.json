@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj": {}
+    "E:\\Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj": {}
   },
   "projects": {
-    "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj": {
+    "E:\\Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj",
+        "projectUniqueName": "E:\\Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj",
         "projectName": "PPG.GuessData",
-        "projectPath": "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj",
+        "projectPath": "E:\\Guess\\PPG.GuessAPI\\PPG.GuessData\\PPG.GuessData.csproj",
         "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "E:\\Guess\\PPG.Guess\\PPG.GuessAPI\\PPG.GuessData\\obj\\",
+        "outputPath": "E:\\Guess\\PPG.GuessAPI\\PPG.GuessData\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

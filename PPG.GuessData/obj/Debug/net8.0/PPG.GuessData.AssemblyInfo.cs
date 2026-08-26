@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PPG.GuessData")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5dfc75616d1c71dbff2c65ce698a985a98503972")]
 [assembly: System.Reflection.AssemblyProductAttribute("PPG.GuessData")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PPG.GuessData")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

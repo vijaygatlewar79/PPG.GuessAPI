@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("PPG.GuessAPI-76d3e3a4-5c11-4dc9-9cd4-0d4e3678332d")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("PPG.GuessAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9b0e98fa728b0e01f3543d43b8cf690a7bbc3834")]
 [assembly: System.Reflection.AssemblyProductAttribute("PPG.GuessAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PPG.GuessAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
