@@ -16,11 +16,42 @@ builder.Services.AddHttpClient<IChartExcelService, ChartExcelService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(60);
 });
+
+var allowedCorsOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Where(origin => origin.Length > 0)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+var allowedStaticWebAppHostPrefixes = (
+        builder.Configuration.GetSection("Cors:AllowedAzureStaticWebAppHostPrefixes").Get<string[]>() ?? [])
+    .Select(prefix => prefix.Trim().TrimEnd('.'))
+    .Where(prefix => prefix.Length > 0)
+    .ToArray();
+
+bool IsAllowedCorsOrigin(string origin)
+{
+    if (allowedCorsOrigins.Contains(origin.TrimEnd('/')))
+    {
+        return true;
+    }
+
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+        || !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+        || !uri.Host.EndsWith(".azurestaticapps.net", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    return allowedStaticWebAppHostPrefixes.Any(prefix =>
+        uri.Host.Equals($"{prefix}.azurestaticapps.net", StringComparison.OrdinalIgnoreCase)
+        || uri.Host.StartsWith($"{prefix}.", StringComparison.OrdinalIgnoreCase)
+        || uri.Host.StartsWith($"{prefix}-", StringComparison.OrdinalIgnoreCase));
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("GuessUi", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+        policy.SetIsOriginAllowed(IsAllowedCorsOrigin)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
