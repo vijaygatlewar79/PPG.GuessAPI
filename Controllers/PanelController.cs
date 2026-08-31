@@ -139,4 +139,137 @@ public sealed class PanelController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpPost("analyze-last-week")]
+    [ProducesResponseType<IReadOnlyList<LastWeekAnalysisRow>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<LastWeekAnalysisRow>>> AnalyzeLastWeek(
+        [FromBody] LastWeekAnalysisRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request.LatestCount is < 1 or > 4)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request.LatestCount),
+                    "Latest must be between 1 and 4.");
+            }
+
+            if (request.SkipLastNumbers is < 0 or > 4)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request.SkipLastNumbers),
+                    "Skip Last Number must be between 0 and 4.");
+            }
+
+            var patterns = request.Patterns
+                .Distinct()
+                .ToArray();
+            if (patterns.Length == 0)
+            {
+                throw new ArgumentException(
+                    "Select at least one panel pattern.",
+                    nameof(request.Patterns));
+            }
+
+            var fileName = await _panelGameService.ResolveGameFileNameAsync(
+                request.FileName,
+                cancellationToken);
+            await using var workbookStream = await _fileStorage.OpenExcelFileAsync(
+                fileName,
+                cancellationToken);
+            var workbook = await _excelReaderService.ReadPanelsAsync(
+                workbookStream,
+                cancellationToken);
+            var availableDays = workbook.AvailableDays
+                .Where(day => !string.IsNullOrWhiteSpace(day))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var rows = new List<LastWeekAnalysisRow>(7);
+
+            for (var rowOffset = 0; rowOffset < 7; rowOffset++)
+            {
+                var skipCount = request.SkipLastNumbers + rowOffset;
+                var seed = _panelAnalysisService.Analyze(
+                    workbook.Panels,
+                    workbook.AvailableDays,
+                    string.Empty,
+                    request.NumberType,
+                    PanelPatternType.Sequence,
+                    skipCount);
+                var validRows = seed.CurrentData
+                    .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
+                    .ToArray();
+                var guessNumbers = string.Join(",", validRows
+                    .TakeLast(request.LatestCount)
+                    .Select(row => row.Number));
+                var totals = new Dictionary<string, int>(StringComparer.Ordinal);
+
+                foreach (var pattern in patterns)
+                {
+                    var analysis = _panelAnalysisService.Analyze(
+                        workbook.Panels,
+                        workbook.AvailableDays,
+                        guessNumbers,
+                        request.NumberType,
+                        pattern,
+                        skipCount);
+                    foreach (var count in analysis.NextNumberCounts)
+                    {
+                        totals[count.Number] = totals.GetValueOrDefault(count.Number) + count.Count;
+                    }
+                }
+
+                var latestDataDay = validRows[^1].DayOfWeek;
+                var latestDataDayIndex = Array.FindIndex(
+                    availableDays,
+                    day => string.Equals(
+                        day,
+                        latestDataDay,
+                        StringComparison.OrdinalIgnoreCase));
+                var nextDayIndex = (latestDataDayIndex + 1) % availableDays.Length;
+
+                rows.Add(new LastWeekAnalysisRow
+                {
+                    DayGuess = availableDays[nextDayIndex],
+                    Numbers = totals
+                        .OrderByDescending(item => item.Value)
+                        .ThenBy(item => item.Key, StringComparer.Ordinal)
+                        .Take(3)
+                        .Select(item => item.Key)
+                        .ToArray(),
+                    PassNumber = skipCount > 0
+                        ? seed.LatestNumbers[^skipCount]
+                        : string.Empty
+                });
+            }
+
+            return Ok(rows);
+        }
+        catch (ArgumentException exception)
+        {
+            var fieldName = exception.ParamName switch
+            {
+                "numberType" => nameof(request.NumberType),
+                "fileName" => nameof(request.FileName),
+                nameof(request.LatestCount) => nameof(request.LatestCount),
+                nameof(request.SkipLastNumbers) => nameof(request.SkipLastNumbers),
+                nameof(request.Patterns) => nameof(request.Patterns),
+                _ => nameof(request.Patterns)
+            };
+            ModelState.AddModelError(fieldName, exception.Message);
+            return ValidationProblem(ModelState);
+        }
+        catch (InvalidDataException exception)
+        {
+            ModelState.AddModelError(nameof(request.FileName), exception.Message);
+            return ValidationProblem(ModelState);
+        }
+        catch (IOException exception)
+        {
+            ModelState.AddModelError(nameof(request.FileName), $"The selected game file could not be read: {exception.Message}");
+            return ValidationProblem(ModelState);
+        }
+    }
 }

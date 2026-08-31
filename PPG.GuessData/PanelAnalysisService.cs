@@ -25,11 +25,11 @@ public sealed class PanelAnalysisService : IPanelAnalysisService
             throw new ArgumentOutOfRangeException(nameof(pattern), "Select a valid pattern.");
         }
 
-        if (skipLastNumbers is < 0 or > 4)
+        if (skipLastNumbers is < 0 or > 10)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(skipLastNumbers),
-                "Skip Last Number must be between 0 and 4.");
+                "Skip Last Number must be between 0 and 10.");
         }
 
         var days = availableDays

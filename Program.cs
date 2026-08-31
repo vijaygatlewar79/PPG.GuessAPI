@@ -8,7 +8,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddMemoryCache();
 builder.Services.Configure<AzureBlobStorageOptions>(
     builder.Configuration.GetSection(AzureBlobStorageOptions.SectionName));
-builder.Services.AddSingleton<IPanelFileStorage, AzureBlobPanelFileStorage>();
+builder.Services.AddSingleton<IPanelFileStorage, LocalPanelFileStorage>();
 builder.Services.AddScoped<IExcelReaderService, ExcelReaderService>();
 builder.Services.AddScoped<IPanelAnalysisService, PanelAnalysisService>();
 builder.Services.AddScoped<IPanelGameService, PanelGameService>();
@@ -65,13 +65,14 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Always enable Swagger and Swagger UI in all environments (development and production).
+app.UseSwagger();
+app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("GuessUi");
 
