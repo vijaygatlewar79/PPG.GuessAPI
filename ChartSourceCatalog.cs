@@ -62,6 +62,13 @@ public sealed class ChartSourceCatalog
                     : existingIndex >= 0
                     ? sources[existingIndex].DisplayName
                     : Path.GetFileNameWithoutExtension(fileName.Trim()),
+                OrderBy = existingIndex >= 0
+                    ? sources[existingIndex].OrderBy
+                    : sources
+                        .Where(source => source.OrderBy < int.MaxValue)
+                        .Select(source => source.OrderBy)
+                        .DefaultIfEmpty(0)
+                        .Max() + 1,
                 Url = url.Trim()
             };
 
@@ -204,7 +211,9 @@ public sealed class ChartSourceCatalog
                 !string.IsNullOrWhiteSpace(source.FileName) &&
                 !string.IsNullOrWhiteSpace(source.DisplayName) &&
                 !string.IsNullOrWhiteSpace(source.Url))
-            .OrderBy(source => source.FileName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(source => source.OrderBy)
+            .ThenBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(source => source.FileName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 

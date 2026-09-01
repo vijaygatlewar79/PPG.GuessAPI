@@ -46,9 +46,14 @@ public sealed class PanelController : ControllerBase
             {
                 FileName = game.FileName,
                 DisplayName = source?.DisplayName ?? game.DisplayName,
+                OrderBy = source?.OrderBy ?? game.OrderBy,
                 SourceUrl = source?.Url ?? game.SourceUrl
             };
-        }).ToArray());
+        })
+        .OrderBy(game => game.OrderBy)
+        .ThenBy(game => game.DisplayName, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(game => game.FileName, StringComparer.OrdinalIgnoreCase)
+        .ToArray());
     }
 
     [HttpGet]
@@ -163,6 +168,13 @@ public sealed class PanelController : ControllerBase
                     "Skip Last Number must be between 0 and 4.");
             }
 
+            if (request.TopCount is < 1 or > 5)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request.TopCount),
+                    "Top count must be between 1 and 5.");
+            }
+
             var patterns = request.Patterns
                 .Distinct()
                 .ToArray();
@@ -236,7 +248,7 @@ public sealed class PanelController : ControllerBase
                     Numbers = totals
                         .OrderByDescending(item => item.Value)
                         .ThenBy(item => item.Key, StringComparer.Ordinal)
-                        .Take(3)
+                        .Take(request.TopCount)
                         .Select(item => item.Key)
                         .ToArray(),
                     PassNumber = skipCount > 0
@@ -254,6 +266,7 @@ public sealed class PanelController : ControllerBase
                 "numberType" => nameof(request.NumberType),
                 "fileName" => nameof(request.FileName),
                 nameof(request.LatestCount) => nameof(request.LatestCount),
+                nameof(request.TopCount) => nameof(request.TopCount),
                 nameof(request.SkipLastNumbers) => nameof(request.SkipLastNumbers),
                 nameof(request.Patterns) => nameof(request.Patterns),
                 _ => nameof(request.Patterns)

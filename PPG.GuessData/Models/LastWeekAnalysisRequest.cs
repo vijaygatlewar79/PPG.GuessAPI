@@ -10,5 +10,7 @@ public sealed class LastWeekAnalysisRequest
 
     public int SkipLastNumbers { get; init; }
 
+    public int TopCount { get; init; } = 3;
+
     public IReadOnlyList<PanelPatternType> Patterns { get; init; } = [];
 }

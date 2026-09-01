@@ -9,7 +9,7 @@ public sealed class LocalPanelFileStorage : IPanelFileStorage
     private static readonly TimeSpan IndiaStandardTimeOffset = TimeSpan.FromMinutes(330);
     private readonly string _rootFolder;
     private readonly string _backupRoot;
-    private readonly string _catalogFileName = "chart-sources.json";
+    private readonly string _catalogPath;
 
         public LocalPanelFileStorage(IHostEnvironment env)
         {
@@ -40,6 +40,10 @@ public sealed class LocalPanelFileStorage : IPanelFileStorage
             // Use a backup folder alongside the chosen root Files folder.
             _backupRoot = Path.Combine(Path.GetDirectoryName(_rootFolder) ?? env.ContentRootPath, "FilesBackup");
             Directory.CreateDirectory(_backupRoot);
+
+            // chart-sources.json is a project-level configuration file. Keeping it
+            // beside the app settings also makes edits visible immediately in the UI.
+            _catalogPath = Path.Combine(env.ContentRootPath, "chart-sources.json");
         }
 
     public Task<IReadOnlyList<string>> ListExcelFileNamesAsync(CancellationToken cancellationToken = default)
@@ -101,17 +105,15 @@ public sealed class LocalPanelFileStorage : IPanelFileStorage
 
     public Task<string?> ReadCatalogAsync(CancellationToken cancellationToken = default)
     {
-        var path = Path.Combine(_rootFolder, _catalogFileName);
-        if (!File.Exists(path)) return Task.FromResult<string?>(null);
-        var json = File.ReadAllText(path);
+        if (!File.Exists(_catalogPath)) return Task.FromResult<string?>(null);
+        var json = File.ReadAllText(_catalogPath);
         return Task.FromResult<string?>(json);
     }
 
     public Task WriteCatalogAsync(string catalogJson, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(catalogJson);
-        var path = Path.Combine(_rootFolder, _catalogFileName);
-        File.WriteAllText(path, catalogJson);
+        File.WriteAllText(_catalogPath, catalogJson);
         return Task.CompletedTask;
     }
 

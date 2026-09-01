@@ -1,27 +1,33 @@
 [
   {
     "fileName": "KALYAN MORNING PENAL.xlsx",
-    "displayName": "Kalyan Morning",
+    "displayName": "KALYAN MORNING (11:40 - 12:40 PM)",
+    "orderBy": 1,
     "url": "https://sattamatkadpboss.mobi/record/kalyan-morning-penal-chart.php"
   },
   {
-    "fileName": "kalyan-penal-chart.xlsx",
-    "displayName": "kalyan-penal-chart",
-    "url": "https://sattamatkadpboss.mobi/record/kalyan-penal-chart.php"
-  },
-  {
     "fileName": "Prabhat Panel Chart.xlsx",
-    "displayName": "Prabhat",
+    "displayName": "PRABHAT (01:30 - 03:00 PM)",
+    "orderBy": 2,
     "url": "https://sattamatkadpboss.mobi/record/prabhat-panel-chart.php#top"
   },
   {
-    "fileName": "RAJDHANI NIGHT.xlsx",
-    "displayName": "Rajdhani Night",
-    "url": "https://sattamatkadpboss.mobi/record/rajdhani-night-penal-chart.php"
+    "fileName": "rajdhani-day-penal-chart.xlsx",
+    "displayName": "RAJDHANI DAY (03:00 - 05:00)",
+    "orderBy": 3,
+    "url": "https://sattamatkadpboss.mobi/record/rajdhani-day-penal-chart.php"
   },
   {
-    "fileName": "rajdhani-day-penal-chart.xlsx",
-    "displayName": "Rajdhani Day",
-    "url": "https://sattamatkadpboss.mobi/record/rajdhani-day-penal-chart.php"
+    "fileName": "kalyan-penal-chart.xlsx",
+    "displayName": "KALYAN (03:45 - 05:45)",
+    "orderBy": 4,
+    "url": "https://sattamatkadpboss.mobi/record/kalyan-penal-chart.php"
+  },
+
+  {
+    "fileName": "RAJDHANI NIGHT.xlsx",
+    "displayName": "RAJDHANI NIGHT (09:30 - 11:45)",
+    "orderBy": 5,
+    "url": "https://sattamatkadpboss.mobi/record/rajdhani-night-penal-chart.php"
   }
 ]
