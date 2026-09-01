@@ -175,6 +175,13 @@ public sealed class PanelController : ControllerBase
                     "Top count must be between 1 and 5.");
             }
 
+            if (request.DayCount is < 1 or > 30)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request.DayCount),
+                    "Show Last Day Result must be between 1 and 30 days.");
+            }
+
             var patterns = request.Patterns
                 .Distinct()
                 .ToArray();
@@ -198,18 +205,37 @@ public sealed class PanelController : ControllerBase
                 .Where(day => !string.IsNullOrWhiteSpace(day))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var rows = new List<LastWeekAnalysisRow>(7);
+            var fullSeed = _panelAnalysisService.Analyze(
+                workbook.Panels,
+                workbook.AvailableDays,
+                string.Empty,
+                request.NumberType,
+                PanelPatternType.Sequence);
+            var fullValidRows = fullSeed.CurrentData
+                .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
+                .ToArray();
+            var latestDataDayIndex = Array.FindIndex(
+                availableDays,
+                day => string.Equals(
+                    day,
+                    fullValidRows[^1].DayOfWeek,
+                    StringComparison.OrdinalIgnoreCase));
+            var nextUnreportedDay = availableDays[
+                (latestDataDayIndex + 1) % availableDays.Length];
+            var rows = new List<LastWeekAnalysisRow>(request.DayCount);
 
-            for (var rowOffset = 0; rowOffset < 7; rowOffset++)
+            for (var rowOffset = 0; rowOffset < request.DayCount; rowOffset++)
             {
                 var skipCount = request.SkipLastNumbers + rowOffset;
-                var seed = _panelAnalysisService.Analyze(
-                    workbook.Panels,
-                    workbook.AvailableDays,
-                    string.Empty,
-                    request.NumberType,
-                    PanelPatternType.Sequence,
-                    skipCount);
+                var seed = skipCount == 0
+                    ? fullSeed
+                    : _panelAnalysisService.Analyze(
+                        workbook.Panels,
+                        workbook.AvailableDays,
+                        string.Empty,
+                        request.NumberType,
+                        PanelPatternType.Sequence,
+                        skipCount);
                 var validRows = seed.CurrentData
                     .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
                     .ToArray();
@@ -233,27 +259,20 @@ public sealed class PanelController : ControllerBase
                     }
                 }
 
-                var latestDataDay = validRows[^1].DayOfWeek;
-                var latestDataDayIndex = Array.FindIndex(
-                    availableDays,
-                    day => string.Equals(
-                        day,
-                        latestDataDay,
-                        StringComparison.OrdinalIgnoreCase));
-                var nextDayIndex = (latestDataDayIndex + 1) % availableDays.Length;
+                var passRow = skipCount > 0
+                    ? fullValidRows[^skipCount]
+                    : null;
 
                 rows.Add(new LastWeekAnalysisRow
                 {
-                    DayGuess = availableDays[nextDayIndex],
+                    DayGuess = passRow?.DayOfWeek ?? nextUnreportedDay,
                     Numbers = totals
                         .OrderByDescending(item => item.Value)
                         .ThenBy(item => item.Key, StringComparer.Ordinal)
                         .Take(request.TopCount)
                         .Select(item => item.Key)
                         .ToArray(),
-                    PassNumber = skipCount > 0
-                        ? seed.LatestNumbers[^skipCount]
-                        : string.Empty
+                    PassNumber = passRow?.Number ?? string.Empty
                 });
             }
 
@@ -267,6 +286,7 @@ public sealed class PanelController : ControllerBase
                 "fileName" => nameof(request.FileName),
                 nameof(request.LatestCount) => nameof(request.LatestCount),
                 nameof(request.TopCount) => nameof(request.TopCount),
+                nameof(request.DayCount) => nameof(request.DayCount),
                 nameof(request.SkipLastNumbers) => nameof(request.SkipLastNumbers),
                 nameof(request.Patterns) => nameof(request.Patterns),
                 _ => nameof(request.Patterns)

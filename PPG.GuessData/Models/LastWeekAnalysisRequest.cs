@@ -12,5 +12,7 @@ public sealed class LastWeekAnalysisRequest
 
     public int TopCount { get; init; } = 3;
 
+    public int DayCount { get; init; } = 7;
+
     public IReadOnlyList<PanelPatternType> Patterns { get; init; } = [];
 }
