@@ -393,7 +393,9 @@ public sealed class ChartExcelService : IChartExcelService
     private static readonly HashSet<string> AllowedDomains = new(StringComparer.OrdinalIgnoreCase)
     {
         "sattamatkadpboss.mobi",
-        "www.sattamatkadpboss.mobi"
+        "www.sattamatkadpboss.mobi",
+        "sattakalyanmatka.net",
+        "www.sattakalyanmatka.net"
     };
 
     private static readonly Regex WeekDatePattern = new(
