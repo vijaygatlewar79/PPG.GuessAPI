@@ -168,11 +168,11 @@ public sealed class PanelController : ControllerBase
                     "Skip Last Number must be between 0 and 4.");
             }
 
-            if (request.TopCount is < 1 or > 5)
+            if (request.TopCount is < 1 or > 10)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(request.TopCount),
-                    "Top count must be between 1 and 5.");
+                    "Top count must be between 1 and 10.");
             }
 
             if (request.DayCount is < 1 or > 30)
@@ -292,6 +292,118 @@ public sealed class PanelController : ControllerBase
                 _ => nameof(request.Patterns)
             };
             ModelState.AddModelError(fieldName, exception.Message);
+            return ValidationProblem(ModelState);
+        }
+        catch (InvalidDataException exception)
+        {
+            ModelState.AddModelError(nameof(request.FileName), exception.Message);
+            return ValidationProblem(ModelState);
+        }
+        catch (IOException exception)
+        {
+            ModelState.AddModelError(nameof(request.FileName), $"The selected game file could not be read: {exception.Message}");
+            return ValidationProblem(ModelState);
+        }
+    }
+
+    [HttpPost("analyze-pattern-wise")]
+    [ProducesResponseType<IReadOnlyList<PatternWiseAnalysisRow>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<PatternWiseAnalysisRow>>> AnalyzePatternWise(
+        [FromBody] PatternWiseAnalysisRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request.LatestCount is < 1 or > 4)
+                throw new ArgumentOutOfRangeException(nameof(request.LatestCount), "Latest must be between 1 and 4.");
+            if (request.SkipLastNumbers is < 0 or > 4)
+                throw new ArgumentOutOfRangeException(nameof(request.SkipLastNumbers), "Skip Last Number must be between 0 and 4.");
+            if (request.TopCount is < 1 or > 10)
+                throw new ArgumentOutOfRangeException(nameof(request.TopCount), "Top count must be between 1 and 10.");
+            if (request.DayCount is < 1 or > 30)
+                throw new ArgumentOutOfRangeException(nameof(request.DayCount), "Day count must be between 1 and 30.");
+
+            var patterns = request.Patterns.Distinct().ToArray();
+            if (patterns.Length == 0)
+                throw new ArgumentException("Select at least one panel pattern.", nameof(request.Patterns));
+
+            var fileName = await _panelGameService.ResolveGameFileNameAsync(request.FileName, cancellationToken);
+            await using var workbookStream = await _fileStorage.OpenExcelFileAsync(fileName, cancellationToken);
+            var workbook = await _excelReaderService.ReadPanelsAsync(workbookStream, cancellationToken);
+            var fullSeed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, request.NumberType, PanelPatternType.Sequence);
+            var validRows = fullSeed.CurrentData
+                .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
+                .ToArray();
+            var availableDays = workbook.AvailableDays
+                .Where(day => !string.IsNullOrWhiteSpace(day))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var latestDayIndex = Array.FindIndex(availableDays, day => string.Equals(
+                day, validRows[^1].DayOfWeek, StringComparison.OrdinalIgnoreCase));
+            var todayGuessDay = availableDays[(latestDayIndex + 1) % availableDays.Length];
+            var currentGuessNumbers = string.Join(",", validRows
+                .TakeLast(request.LatestCount)
+                .Select(row => row.Number));
+
+            var output = new List<PatternWiseAnalysisRow>(patterns.Length);
+            foreach (var pattern in patterns)
+            {
+                var todayNumbers = _panelAnalysisService.Analyze(
+                    workbook.Panels, workbook.AvailableDays, currentGuessNumbers,
+                    request.NumberType, pattern)
+                    .NextNumberCounts
+                    .OrderByDescending(item => item.Count)
+                    .ThenBy(item => item.Number, StringComparer.Ordinal)
+                    .Take(request.TopCount)
+                    .Select(item => item.Number)
+                    .ToArray();
+                var results = new List<PatternWiseDayResult>(request.DayCount);
+                for (var offset = 1; offset <= request.DayCount; offset++)
+                {
+                    var skipCount = request.SkipLastNumbers + offset;
+                    if (skipCount > validRows.Length) break;
+                    var seed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, request.NumberType, PanelPatternType.Sequence, skipCount);
+                    var guessNumbers = string.Join(",", seed.CurrentData
+                        .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
+                        .TakeLast(request.LatestCount)
+                        .Select(row => row.Number));
+                    var counts = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, guessNumbers, request.NumberType, pattern, skipCount)
+                        .NextNumberCounts
+                        .OrderByDescending(item => item.Count)
+                        .ThenBy(item => item.Number, StringComparer.Ordinal)
+                        .Take(request.TopCount)
+                        .Select(item => item.Number)
+                        .ToArray();
+                    var pass = validRows[^skipCount];
+                    var rank = Array.FindIndex(counts, value => value == pass.Number);
+                    results.Add(new PatternWiseDayResult
+                    {
+                        DayGuess = pass.DayOfWeek,
+                        Numbers = counts,
+                        PassNumber = pass.Number,
+                        MatchRank = rank >= 0 ? rank + 1 : null
+                    });
+                }
+
+                output.Add(new PatternWiseAnalysisRow
+                {
+                    Pattern = pattern,
+                    Results = results,
+                    PassedCount = results.Count(result => result.MatchRank.HasValue),
+                    EvaluatedCount = results.Count,
+                    TodayGuessDay = todayGuessDay,
+                    TodayNumbers = todayNumbers
+                });
+            }
+
+            return Ok(output.OrderByDescending(row => row.EvaluatedCount == 0 ? 0 : (double)row.PassedCount / row.EvaluatedCount)
+                .ThenBy(row => row.Results.Where(result => result.MatchRank.HasValue).Select(result => result.MatchRank!.Value).DefaultIfEmpty(int.MaxValue).Average())
+                .ThenBy(row => row.Pattern.ToString(), StringComparer.Ordinal));
+        }
+        catch (ArgumentException exception)
+        {
+            ModelState.AddModelError(exception.ParamName ?? "request", exception.Message);
             return ValidationProblem(ModelState);
         }
         catch (InvalidDataException exception)

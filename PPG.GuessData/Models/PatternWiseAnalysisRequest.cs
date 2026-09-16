@@ -1,6 +1,6 @@
 namespace PPG.GuessData.Models;
 
-public sealed class LastWeekAnalysisRequest
+public sealed class PatternWiseAnalysisRequest
 {
     public string FileName { get; init; } = string.Empty;
 

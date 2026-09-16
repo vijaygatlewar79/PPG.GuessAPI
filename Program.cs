@@ -15,6 +15,7 @@ builder.Services.AddScoped<IPanelGameService, PanelGameService>();
 builder.Services.Configure<GeminiPatternPredictionOptions>(
     builder.Configuration.GetSection(GeminiPatternPredictionOptions.SectionName));
 builder.Services.AddScoped<IPatternPredictionService, GeminiPatternPredictionService>();
+builder.Services.AddScoped<IGenericPredictionService, GenericPredictionService>();
 builder.Services.AddSingleton<ChartSourceCatalog>();
 builder.Services.AddHttpClient<IChartExcelService, ChartExcelService>(client =>
 {
