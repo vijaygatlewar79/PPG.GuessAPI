@@ -14,5 +14,8 @@ public sealed class PatternWiseAnalysisRequest
 
     public int DayCount { get; init; } = 7;
 
+    // Uses the selected day-specific OPEN or CLOSE column as a three-digit panel value.
+    public bool UseTripleNumbers { get; init; }
+
     public IReadOnlyList<PanelPatternType> Patterns { get; init; } = [];
 }

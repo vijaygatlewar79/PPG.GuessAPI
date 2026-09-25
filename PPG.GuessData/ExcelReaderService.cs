@@ -232,12 +232,11 @@ public sealed class ExcelReaderService : IExcelReaderService
 
     private static Panel MapPanel(IReadOnlyDictionary<string, string> values)
     {
-        var headers = values.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var panelValues = values
             .Where(value => !string.Equals(value.Key, "WEEK_DATE", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(
                 value => value.Key,
-                value => (object?)NormalizePanelValue(value.Key, value.Value, headers),
+                value => (object?)value.Value,
                 StringComparer.OrdinalIgnoreCase);
 
         return new Panel
@@ -247,16 +246,4 @@ public sealed class ExcelReaderService : IExcelReaderService
         };
     }
 
-    private static string NormalizePanelValue(
-        string header,
-        string value,
-        IReadOnlySet<string> headers)
-    {
-        var isPairColumn = headers.Contains($"{header}_OPEN")
-            && headers.Contains($"{header}_CLOSE");
-
-        return isPairColumn && value.Length == 1 && char.IsDigit(value[0])
-            ? value.PadLeft(2, '0')
-            : value;
-    }
 }

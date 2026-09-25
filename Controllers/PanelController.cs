@@ -307,6 +307,7 @@ public sealed class PanelController : ControllerBase
     }
 
     [HttpPost("analyze-pattern-wise")]
+    [HttpPost("analyze-pattern-wise-triple")]
     [ProducesResponseType<IReadOnlyList<PatternWiseAnalysisRow>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<IReadOnlyList<PatternWiseAnalysisRow>>> AnalyzePatternWise(
@@ -317,12 +318,12 @@ public sealed class PanelController : ControllerBase
         {
             if (request.LatestCount is < 1 or > 4)
                 throw new ArgumentOutOfRangeException(nameof(request.LatestCount), "Latest must be between 1 and 4.");
-            if (request.SkipLastNumbers is < 0 or > 4)
-                throw new ArgumentOutOfRangeException(nameof(request.SkipLastNumbers), "Skip Last Number must be between 0 and 4.");
+            if (request.SkipLastNumbers is < 0 or > 7)
+                throw new ArgumentOutOfRangeException(nameof(request.SkipLastNumbers), "Skip Last Number must be between 0 and 7.");
             if (request.TopCount is < 1 or > 10)
                 throw new ArgumentOutOfRangeException(nameof(request.TopCount), "Top count must be between 1 and 10.");
-            if (request.DayCount is < 1 or > 30)
-                throw new ArgumentOutOfRangeException(nameof(request.DayCount), "Day count must be between 1 and 30.");
+            if (request.DayCount is < 1 or > 365)
+                throw new ArgumentOutOfRangeException(nameof(request.DayCount), "Day count must be between 1 and 365.");
 
             var patterns = request.Patterns.Distinct().ToArray();
             if (patterns.Length == 0)
@@ -331,10 +332,19 @@ public sealed class PanelController : ControllerBase
             var fileName = await _panelGameService.ResolveGameFileNameAsync(request.FileName, cancellationToken);
             await using var workbookStream = await _fileStorage.OpenExcelFileAsync(fileName, cancellationToken);
             var workbook = await _excelReaderService.ReadPanelsAsync(workbookStream, cancellationToken);
-            var fullSeed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, request.NumberType, PanelPatternType.Sequence);
+            var fullSeed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, request.NumberType, PanelPatternType.Sequence, useTripleNumbers: request.UseTripleNumbers);
             var validRows = fullSeed.CurrentData
                 .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
                 .ToArray();
+            if (validRows.Length == 0)
+            {
+                var columnType = request.NumberType == PanelNumberType.Open ? "OPEN" : "CLOSE";
+                throw new ArgumentException(
+                    request.UseTripleNumbers
+                        ? $"The selected game does not contain three-digit values in its *_{columnType} columns."
+                        : "The selected game does not contain valid panel values.",
+                    nameof(request.FileName));
+            }
             var availableDays = workbook.AvailableDays
                 .Where(day => !string.IsNullOrWhiteSpace(day))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -351,7 +361,7 @@ public sealed class PanelController : ControllerBase
             {
                 var todayNumbers = _panelAnalysisService.Analyze(
                     workbook.Panels, workbook.AvailableDays, currentGuessNumbers,
-                    request.NumberType, pattern)
+                    request.NumberType, pattern, useTripleNumbers: request.UseTripleNumbers)
                     .NextNumberCounts
                     .OrderByDescending(item => item.Count)
                     .ThenBy(item => item.Number, StringComparer.Ordinal)
@@ -363,12 +373,12 @@ public sealed class PanelController : ControllerBase
                 {
                     var skipCount = request.SkipLastNumbers + offset;
                     if (skipCount > validRows.Length) break;
-                    var seed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, request.NumberType, PanelPatternType.Sequence, skipCount);
+                    var seed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, request.NumberType, PanelPatternType.Sequence, skipCount, request.UseTripleNumbers);
                     var guessNumbers = string.Join(",", seed.CurrentData
                         .Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*")
                         .TakeLast(request.LatestCount)
                         .Select(row => row.Number));
-                    var counts = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, guessNumbers, request.NumberType, pattern, skipCount)
+                    var counts = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, guessNumbers, request.NumberType, pattern, skipCount, request.UseTripleNumbers)
                         .NextNumberCounts
                         .OrderByDescending(item => item.Count)
                         .ThenBy(item => item.Number, StringComparer.Ordinal)
@@ -417,4 +427,87 @@ public sealed class PanelController : ControllerBase
             return ValidationProblem(ModelState);
         }
     }
+
+    [HttpPost("analyze-pattern-wise-double")]
+    [ProducesResponseType<IReadOnlyList<PatternWiseAnalysisRow>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<PatternWiseAnalysisRow>>> AnalyzePatternWiseDouble(
+        [FromBody] PatternWiseAnalysisRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request.LatestCount is < 1 or > 4)
+                throw new ArgumentOutOfRangeException(nameof(request.LatestCount), "Latest must be between 1 and 4.");
+            if (request.SkipLastNumbers is < 0 or > 4)
+                throw new ArgumentOutOfRangeException(nameof(request.SkipLastNumbers), "Skip Last Number must be between 0 and 4.");
+            if (request.TopCount is < 1 or > 10)
+                throw new ArgumentOutOfRangeException(nameof(request.TopCount), "Top count must be between 1 and 10.");
+            if (request.DayCount is < 1 or > 30)
+                throw new ArgumentOutOfRangeException(nameof(request.DayCount), "Day count must be between 1 and 30.");
+
+            var patterns = request.Patterns.Distinct().ToArray();
+            if (patterns.Length == 0)
+                throw new ArgumentException("Select at least one panel pattern.", nameof(request.Patterns));
+
+            var fileName = await _panelGameService.ResolveGameFileNameAsync(request.FileName, cancellationToken);
+            await using var workbookStream = await _fileStorage.OpenExcelFileAsync(fileName, cancellationToken);
+            var workbook = await _excelReaderService.ReadPanelsAsync(workbookStream, cancellationToken);
+            var openRows = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, PanelNumberType.Open, PanelPatternType.Sequence).CurrentData;
+            var closeRows = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, PanelNumberType.Close, PanelPatternType.Sequence).CurrentData;
+            var jodiRows = openRows.Zip(closeRows)
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.First.Number) && pair.First.Number != "*" && !string.IsNullOrWhiteSpace(pair.Second.Number) && pair.Second.Number != "*")
+                .ToArray();
+            if (jodiRows.Length == 0)
+                throw new ArgumentException("The selected game does not contain complete Open and Close pairs.", nameof(request.FileName));
+
+            var availableDays = workbook.AvailableDays.Where(day => !string.IsNullOrWhiteSpace(day)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var latestDayIndex = Array.FindIndex(availableDays, day => string.Equals(day, jodiRows[^1].First.DayOfWeek, StringComparison.OrdinalIgnoreCase));
+            var todayGuessDay = availableDays[(latestDayIndex + 1) % availableDays.Length];
+            var currentOpenNumbers = string.Join(",", openRows.Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*").TakeLast(request.LatestCount).Select(row => row.Number));
+            var currentCloseNumbers = string.Join(",", closeRows.Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*").TakeLast(request.LatestCount).Select(row => row.Number));
+
+            var output = new List<PatternWiseAnalysisRow>(patterns.Length);
+            foreach (var pattern in patterns)
+            {
+                var todayNumbers = GetRankedJodis(
+                    _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, currentOpenNumbers, PanelNumberType.Open, pattern).NextNumberCounts,
+                    _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, currentCloseNumbers, PanelNumberType.Close, pattern).NextNumberCounts,
+                    request.TopCount);
+                var results = new List<PatternWiseDayResult>(request.DayCount);
+                for (var offset = 1; offset <= request.DayCount && request.SkipLastNumbers + offset <= jodiRows.Length; offset++)
+                {
+                    var skipCount = request.SkipLastNumbers + offset;
+                    var openSeed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, PanelNumberType.Open, PanelPatternType.Sequence, skipCount).CurrentData;
+                    var closeSeed = _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, string.Empty, PanelNumberType.Close, PanelPatternType.Sequence, skipCount).CurrentData;
+                    var guessOpenNumbers = string.Join(",", openSeed.Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*").TakeLast(request.LatestCount).Select(row => row.Number));
+                    var guessCloseNumbers = string.Join(",", closeSeed.Where(row => !string.IsNullOrWhiteSpace(row.Number) && row.Number != "*").TakeLast(request.LatestCount).Select(row => row.Number));
+                    var guesses = GetRankedJodis(
+                        _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, guessOpenNumbers, PanelNumberType.Open, pattern, skipCount).NextNumberCounts,
+                        _panelAnalysisService.Analyze(workbook.Panels, workbook.AvailableDays, guessCloseNumbers, PanelNumberType.Close, pattern, skipCount).NextNumberCounts,
+                        request.TopCount);
+                    var pass = jodiRows[^skipCount];
+                    var passNumber = pass.First.Number + pass.Second.Number;
+                    var rank = Array.FindIndex(guesses, value => value == passNumber);
+                    results.Add(new PatternWiseDayResult { DayGuess = pass.First.DayOfWeek, Numbers = guesses, PassNumber = passNumber, MatchRank = rank >= 0 ? rank + 1 : null });
+                }
+
+                output.Add(new PatternWiseAnalysisRow { Pattern = pattern, Results = results, PassedCount = results.Count(result => result.MatchRank.HasValue), EvaluatedCount = results.Count, TodayGuessDay = todayGuessDay, TodayNumbers = todayNumbers });
+            }
+
+            return Ok(output.OrderByDescending(row => row.EvaluatedCount == 0 ? 0 : (double)row.PassedCount / row.EvaluatedCount)
+                .ThenBy(row => row.Results.Where(result => result.MatchRank.HasValue).Select(result => result.MatchRank!.Value).DefaultIfEmpty(int.MaxValue).Average())
+                .ThenBy(row => row.Pattern.ToString(), StringComparer.Ordinal));
+        }
+        catch (ArgumentException exception) { ModelState.AddModelError(exception.ParamName ?? "request", exception.Message); return ValidationProblem(ModelState); }
+        catch (InvalidDataException exception) { ModelState.AddModelError(nameof(request.FileName), exception.Message); return ValidationProblem(ModelState); }
+        catch (IOException exception) { ModelState.AddModelError(nameof(request.FileName), $"The selected game file could not be read: {exception.Message}"); return ValidationProblem(ModelState); }
+    }
+
+    private static string[] GetRankedJodis(IReadOnlyList<NextNumberCount> openCounts, IReadOnlyList<NextNumberCount> closeCounts, int topCount) =>
+        openCounts.OrderByDescending(item => item.Count).ThenBy(item => item.Number, StringComparer.Ordinal)
+            .Zip(closeCounts.OrderByDescending(item => item.Count).ThenBy(item => item.Number, StringComparer.Ordinal))
+            .Take(topCount)
+            .Select(pair => pair.First.Number + pair.Second.Number)
+            .ToArray();
 }

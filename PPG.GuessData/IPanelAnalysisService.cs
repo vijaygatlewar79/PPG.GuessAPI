@@ -10,5 +10,6 @@ public interface IPanelAnalysisService
         string numbers,
         PanelNumberType numberType = PanelNumberType.Open,
         PanelPatternType pattern = PanelPatternType.Sequence,
-        int skipLastNumbers = 0);
+        int skipLastNumbers = 0,
+        bool useTripleNumbers = false);
 }

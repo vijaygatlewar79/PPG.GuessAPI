@@ -10,7 +10,8 @@ public sealed class PanelAnalysisService : IPanelAnalysisService
         string numbers,
         PanelNumberType numberType = PanelNumberType.Open,
         PanelPatternType pattern = PanelPatternType.Sequence,
-        int skipLastNumbers = 0)
+        int skipLastNumbers = 0,
+        bool useTripleNumbers = false)
     {
         ArgumentNullException.ThrowIfNull(panels);
         ArgumentNullException.ThrowIfNull(availableDays);
@@ -50,7 +51,7 @@ public sealed class PanelAnalysisService : IPanelAnalysisService
                 nameof(pattern));
         }
 
-        var currentData = BuildCurrentData(panels, days, numberType);
+        var currentData = BuildCurrentData(panels, days, numberType, useTripleNumbers);
         var panelRows = BuildPanelRows(panels, days);
         var latestNumbers = currentData
             .Where(row =>
@@ -219,7 +220,8 @@ public sealed class PanelAnalysisService : IPanelAnalysisService
     private static IReadOnlyList<CurrentDataRow> BuildCurrentData(
         IReadOnlyList<Panel> panels,
         IReadOnlyList<string> days,
-        PanelNumberType numberType)
+        PanelNumberType numberType,
+        bool useTripleNumbers = false)
     {
         var currentData = new List<CurrentDataRow>(panels.Count * days.Count);
         var id = 1;
@@ -229,12 +231,14 @@ public sealed class PanelAnalysisService : IPanelAnalysisService
             for (var dayIndex = 0; dayIndex < days.Count; dayIndex++)
             {
                 var day = days[dayIndex];
-                var value = panel.GetValue(day);
+                var value = useTripleNumbers
+                    ? panel.GetValue($"{day}_{numberType.ToString().ToUpperInvariant()}")
+                    : panel.GetValue(day);
                 currentData.Add(new CurrentDataRow
                 {
                     Id = id++,
                     DayOfWeek = day,
-                    Number = GetPairDigit(value, numberType),
+                    Number = useTripleNumbers ? GetTripleNumber(value) : GetPairDigit(value, numberType),
                     WeekDate = dayIndex == 0 ? panel.WeekDate : string.Empty
                 });
             }
@@ -245,8 +249,21 @@ public sealed class PanelAnalysisService : IPanelAnalysisService
 
     private static string GetPairDigit(string value, PanelNumberType numberType)
     {
+        // A one-digit result is an Open-only result. It must not be padded to a
+        // two-digit pair, otherwise Open would incorrectly become zero.
+        if (value.Length == 1)
+        {
+            return numberType == PanelNumberType.Open ? value : string.Empty;
+        }
+
         var digitIndex = numberType == PanelNumberType.Close ? 1 : 0;
         return value.Length > digitIndex ? value.Substring(digitIndex, 1) : string.Empty;
+    }
+
+    private static string GetTripleNumber(string value)
+    {
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        return digits.Length == 3 ? digits : string.Empty;
     }
 
     private static IReadOnlyList<CurrentDataWeek> BuildCurrentDataWeeks(

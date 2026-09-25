@@ -6,51 +6,87 @@
     "url": "https://sattamatkadpboss.mobi/record/kalyan-morning-penal-chart.php"
   },
   {
+    "fileName": "maharani-panel-chart.xlsx",
+    "displayName": "MAHARANI-PANEL-CHART (12:15 - 02:15)",
+    "orderBy": 2,
+    "url": "https://sattakalyanmatka.net/maharani-panel-chart.php"
+  },
+  {
+    "fileName": "time-bazar-panel-chart.xlsx",
+    "displayName": "TIME BAZAR (01:00 - 02:00)",
+    "orderBy": 3,
+    "url": "https://sattakalyanmatka.net/time-bazar-panel-chart.php"
+  },
+  {
+    "fileName": "madhur-day-panel-chart.xlsx",
+    "displayName": "MADHUR DAY (01:30 - 02:30)",
+    "orderBy": 4,
+    "url": "https://sattakalyanmatka.net/madhur-day-panel-chart.php"
+  },
+  {
     "fileName": "Prabhat Panel Chart.xlsx",
     "displayName": "PRABHAT (01:30 - 03:00 PM)",
-    "orderBy": 2,
+    "orderBy": 5,
     "url": "https://sattamatkadpboss.mobi/record/prabhat-panel-chart.php#top"
+  },
+  {
+    "fileName": "milan-day-penal-chart.xlsx",
+    "displayName": "MILAN DAY (03:00 - 05:00)",
+    "orderBy": 6,
+    "url": "https://sattakalyanmatka.net/record/milan-day-penal-chart.php"
   },
   {
     "fileName": "rajdhani-day-penal-chart.xlsx",
     "displayName": "RAJDHANI DAY (03:00 - 05:00)",
-    "orderBy": 3,
+    "orderBy": 7,
     "url": "https://sattamatkadpboss.mobi/record/rajdhani-day-penal-chart.php"
   },
   {
     "fileName": "kalyan-penal-chart.xlsx",
     "displayName": "KALYAN (03:45 - 05:45)",
-    "orderBy": 4,
+    "orderBy": 8,
     "url": "https://sattamatkadpboss.mobi/record/kalyan-penal-chart.php"
+  },
+  {
+    "fileName": "sridevi-night-satta-penal-chart.xlsx",
+    "displayName": "SRIDEVI NIGHT (07:15 - 08:15)",
+    "orderBy": 9,
+    "url": "https://sattakalyanmatka.net/record/sridevi-night-satta-penal-chart.php"
+  },
+  {
+    "fileName": "madhur-night-panel-chart.xlsx",
+    "displayName": "MADHUR NIGHT (08:30 - 10:30)",
+    "orderBy": 10,
+    "url": "https://sattakalyanmatka.net/madhur-night-panel-chart.php"
+  },
+  {
+    "fileName": "milan-night-penal-chart.xlsx",
+    "displayName": "MILAN NIGHT (09:10 - 11:10)",
+    "orderBy": 11,
+    "url": "https://sattakalyanmatka.net/record/milan-night-penal-chart.php"
   },
   {
     "fileName": "RAJDHANI NIGHT.xlsx",
     "displayName": "RAJDHANI NIGHT (09:30 - 11:45)",
-    "orderBy": 5,
+    "orderBy": 12,
     "url": "https://sattamatkadpboss.mobi/record/rajdhani-night-penal-chart.php"
-  },
-  {
-    "fileName": "maharani-panel-chart.xlsx",
-    "displayName": "MAHARANI-PANEL-CHART (12:15 - 02:15)",
-    "orderBy": 6,
-    "url": "https://sattakalyanmatka.net/maharani-panel-chart.php"
-  },
-  {
-    "fileName": "KALYAN NIGHT PENAL.xlsx",
-    "displayName": "KALYAN NIGHT (09:45 - 11:45)",
-    "orderBy": 7,
-    "url": "https://sattamatkadpboss.mobi/record/kalyan-night-penal-chart.php"
-  },
-  {
-    "fileName": "sridevi-satta-penal-chart.xlsx",
-    "displayName": "SRIDEVI DAY (11:35 - 12:35)",
-    "orderBy": 8,
-    "url": "https://sattakalyanmatka.net/record/sridevi-satta-penal-chart.php"
   },
   {
     "fileName": "main-bazar-panel-char.xlsx",
     "displayName": "MAIN BAZAR (09:35 - 12:05)",
-    "orderBy": 9,
+    "orderBy": 13,
     "url": "https://sattakalyanmatka.net/main-bazar-panel-chart.php"
+  },
+  {
+    "fileName": "kalyan-night-penal-chart.xlsx",
+    "displayName": "KALYAN NIGHT (09:45 - 11:45)",
+    "orderBy": 14,
+    "url": "https://sattakalyanmatka.net/record/kalyan-night-penal-chart.php"
+  },
+  {
+    "fileName": "sridevi-satta-penal-chart.xlsx",
+    "displayName": "SRIDEVI DAY (11:35 - 12:35)",
+    "orderBy": 15,
+    "url": "https://sattakalyanmatka.net/record/sridevi-satta-penal-chart.php"
   }
 ]

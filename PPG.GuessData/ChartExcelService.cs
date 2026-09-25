@@ -82,7 +82,10 @@ public sealed class ChartExcelService : IChartExcelService
         };
         document.LoadHtml(html);
 
-        var table = document.DocumentNode.SelectSingleNode("//table[contains(@class,'pchart')]")
+        var table = document.DocumentNode.SelectSingleNode(
+                "//table[contains(concat(' ', normalize-space(@class), ' '), ' pchart ')]")
+            ?? document.DocumentNode.SelectSingleNode(
+                "//table[contains(concat(' ', normalize-space(@class), ' '), ' matkaTable ')]")
             ?? throw new InvalidOperationException("Chart table was not found on the page.");
         // The source switches between td and th cells and omits some closing tr tags.
         // Reading every cell in document order keeps week boundaries recoverable.
@@ -394,6 +397,8 @@ public sealed class ChartExcelService : IChartExcelService
     {
         "sattamatkadpboss.mobi",
         "www.sattamatkadpboss.mobi",
+        "sattamatkadpbosss.net",
+        "www.sattamatkadpbosss.net",
         "sattakalyanmatka.net",
         "www.sattakalyanmatka.net"
     };

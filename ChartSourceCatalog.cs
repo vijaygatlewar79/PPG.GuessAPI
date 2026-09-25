@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PPG.GuessData;
 using PPG.GuessData.Models;
 
@@ -62,13 +63,7 @@ public sealed class ChartSourceCatalog
                     : existingIndex >= 0
                     ? sources[existingIndex].DisplayName
                     : Path.GetFileNameWithoutExtension(fileName.Trim()),
-                OrderBy = existingIndex >= 0
-                    ? sources[existingIndex].OrderBy
-                    : sources
-                        .Where(source => source.OrderBy < int.MaxValue)
-                        .Select(source => source.OrderBy)
-                        .DefaultIfEmpty(0)
-                        .Max() + 1,
+                OrderBy = existingIndex >= 0 ? sources[existingIndex].OrderBy : int.MaxValue,
                 Url = url.Trim()
             };
 
@@ -206,24 +201,75 @@ public sealed class ChartSourceCatalog
             json,
             SerializerOptions) ?? [];
 
-        return sources
+        return OrderSources(sources
             .Where(source =>
                 !string.IsNullOrWhiteSpace(source.FileName) &&
                 !string.IsNullOrWhiteSpace(source.DisplayName) &&
-                !string.IsNullOrWhiteSpace(source.Url))
-            .OrderBy(source => source.OrderBy)
-            .ThenBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(source => source.FileName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+                !string.IsNullOrWhiteSpace(source.Url)));
     }
 
     private async Task WriteSourcesAsync(
         IReadOnlyList<ChartSourceOption> sources,
         CancellationToken cancellationToken)
     {
-        var json = JsonSerializer.Serialize(sources, SerializerOptions);
+        var orderedSources = OrderSources(sources);
+        var json = JsonSerializer.Serialize(orderedSources, SerializerOptions);
         await _fileStorage.WriteCatalogAsync(json, cancellationToken);
     }
+
+    private static IReadOnlyList<ChartSourceOption> OrderSources(
+        IEnumerable<ChartSourceOption> sources) =>
+        sources
+            .OrderBy(GetOpeningTime)
+            .ThenBy(GetDayPriority)
+            .ThenBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(source => source.FileName, StringComparer.OrdinalIgnoreCase)
+            .Select((source, index) => new ChartSourceOption
+            {
+                FileName = source.FileName,
+                DisplayName = source.DisplayName,
+                OrderBy = index + 1,
+                Url = source.Url
+            })
+            .ToArray();
+
+    private static int GetOpeningTime(ChartSourceOption source)
+    {
+        var match = OpeningTimePattern.Match(source.DisplayName);
+        if (!match.Success || !int.TryParse(match.Groups["hour"].Value, out var hour)
+            || !int.TryParse(match.Groups["minute"].Value, out var minute)
+            || hour is < 1 or > 12 || minute is < 0 or > 59)
+        {
+            return int.MaxValue;
+        }
+
+        var meridiem = match.Groups["meridiem"].Value;
+        if (meridiem.Equals("AM", StringComparison.OrdinalIgnoreCase))
+        {
+            return (hour % 12) * 60 + minute;
+        }
+
+        if (meridiem.Equals("PM", StringComparison.OrdinalIgnoreCase))
+        {
+            return (hour % 12 + 12) * 60 + minute;
+        }
+
+        // Chart labels omit AM/PM for their afternoon and night schedules.
+        // Morning is the sole AM schedule; all other unlabeled times are PM.
+        return source.DisplayName.Contains("MORNING", StringComparison.OrdinalIgnoreCase)
+            ? (hour % 12) * 60 + minute
+            : (hour % 12 + 12) * 60 + minute;
+    }
+
+    private static int GetDayPriority(ChartSourceOption source) =>
+        source.DisplayName.Contains("DAY", StringComparison.OrdinalIgnoreCase)
+        || source.DisplayName.Contains("MORNING", StringComparison.OrdinalIgnoreCase)
+            ? 0
+            : 1;
+
+    private static readonly Regex OpeningTimePattern = new(
+        @"\((?<hour>\d{1,2}):(?<minute>\d{2})(?:\s*(?<meridiem>AM|PM))?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private async Task<string> ResolveStoredFileNameAsync(
         string configuredFileName,
