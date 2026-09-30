@@ -428,6 +428,128 @@ public sealed class PanelController : ControllerBase
         }
     }
 
+    [HttpPost("analyze-triple-sum")]
+    [ProducesResponseType<TripleSumAnalysisResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<TripleSumAnalysisResult>> AnalyzeTripleSum(
+        [FromBody] TripleSumAnalysisRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request.Number is < 0 or > 9)
+                throw new ArgumentOutOfRangeException(nameof(request.Number), "Number must be between 0 and 9.");
+            if (request.PeriodMonths is not (0 or 1 or 3 or 6 or 9 or 12 or 24 or 36))
+                throw new ArgumentOutOfRangeException(nameof(request.PeriodMonths), "Select a valid period.");
+
+            var fileName = await _panelGameService.ResolveGameFileNameAsync(request.FileName, cancellationToken);
+            await using var workbookStream = await _fileStorage.OpenExcelFileAsync(fileName, cancellationToken);
+            var workbook = await _excelReaderService.ReadPanelsAsync(workbookStream, cancellationToken);
+            var panelStartDates = workbook.Panels
+                .Select(panel => TryGetPanelStartDate(panel.WeekDate))
+                .ToArray();
+            var latestDate = panelStartDates.Where(date => date.HasValue).Max();
+            var cutoffDate = request.PeriodMonths == 0 || !latestDate.HasValue
+                ? (DateOnly?)null
+                : latestDate.Value.AddMonths(-request.PeriodMonths);
+            var tripleCandidates = _panelAnalysisService.Analyze(
+                    workbook.Panels,
+                    workbook.AvailableDays,
+                    "0",
+                    request.NumberType,
+                    PanelPatternType.Sequence,
+                    useTripleNumbers: true)
+                .CurrentData
+                .Select((row, index) => new { row.Number, PanelIndex = index / workbook.AvailableDays.Count })
+                .Where(item => item.Number.Length == 3 && item.Number.All(char.IsDigit))
+                .ToArray();
+            var allHistoryTriples = tripleCandidates
+                .Select(item => item.Number)
+                .ToArray();
+            var allTriples = tripleCandidates
+                .Where(item => cutoffDate is null || (panelStartDates[item.PanelIndex] is { } panelDate && panelDate >= cutoffDate.Value))
+                .Select(item => item.Number)
+                .ToArray();
+            var triples = allTriples
+                // A panel triple's Open/Close pannā is the digit sum reduced to
+                // one digit: e.g. 560 => 5 + 6 + 0 = 11 => 1.
+                .Where(value => value.Sum(character => character - '0') % 10 == request.Number)
+                .ToArray();
+
+            return Ok(new TripleSumAnalysisResult
+            {
+                Number = request.Number,
+                NumberType = request.NumberType,
+                TotalCount = triples.Length,
+                Numbers = triples
+                    .GroupBy(value => value, StringComparer.Ordinal)
+                    .Select(group => new TripleSumAnalysisRow
+                    {
+                        TripleNumber = group.Key,
+                        Count = group.Count()
+                    })
+                    .OrderByDescending(row => row.Count)
+                    .ThenBy(row => row.TripleNumber, StringComparer.Ordinal)
+                    .ToArray(),
+                Summary = Enumerable.Range(0, 10)
+                    .Select(number => new TripleNumberSummaryRow
+                    {
+                        Number = number,
+                        Triples = allTriples
+                            .Where(value => value.Sum(character => character - '0') % 10 == number)
+                            .GroupBy(value => value, StringComparer.Ordinal)
+                            .Select(group => new TripleSumAnalysisRow
+                            {
+                                TripleNumber = group.Key,
+                                Count = group.Count()
+                            })
+                            .OrderByDescending(row => row.Count)
+                            .ThenBy(row => row.TripleNumber, StringComparer.Ordinal)
+                            .ToArray(),
+                        MissingTriples = allHistoryTriples
+                            .Where(value => value.Sum(character => character - '0') % 10 == number)
+                            .GroupBy(value => value, StringComparer.Ordinal)
+                            .Where(group => !allTriples.Contains(group.Key, StringComparer.Ordinal))
+                            .Select(group => new TripleSumAnalysisRow
+                            {
+                                TripleNumber = group.Key,
+                                Count = group.Count()
+                            })
+                            .OrderByDescending(row => row.Count)
+                            .ThenBy(row => row.TripleNumber, StringComparer.Ordinal)
+                            .ToArray()
+                    })
+                    .ToArray()
+            });
+        }
+        catch (ArgumentException exception)
+        {
+            ModelState.AddModelError(exception.ParamName == nameof(request.Number)
+                ? nameof(request.Number)
+                : nameof(request.FileName), exception.Message);
+            return ValidationProblem(ModelState);
+        }
+        catch (InvalidDataException exception)
+        {
+            ModelState.AddModelError(nameof(request.FileName), exception.Message);
+            return ValidationProblem(ModelState);
+        }
+        catch (IOException exception)
+        {
+            ModelState.AddModelError(nameof(request.FileName), $"The selected game file could not be read: {exception.Message}");
+            return ValidationProblem(ModelState);
+        }
+    }
+
+    private static DateOnly? TryGetPanelStartDate(string weekDate)
+    {
+        var start = weekDate.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return DateOnly.TryParseExact(start, ["d/M/yyyy", "dd/MM/yyyy", "d/M/yy", "dd/MM/yy"],
+            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date)
+            ? date
+            : null;
+    }
+
     [HttpPost("analyze-pattern-wise-double")]
     [ProducesResponseType<IReadOnlyList<PatternWiseAnalysisRow>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
